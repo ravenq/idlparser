@@ -72,7 +72,7 @@ class CppMaker(object):
         ret = t.render(c)
         
         ret = self.__after_make(ret)
-        print ret
+        self.__out(str, i_obj.name + '.h',)
         
     def make_cpp(self, i_obj):
         self.__pre_make(i_obj)
@@ -83,7 +83,7 @@ class CppMaker(object):
         ret = t.render(c)
         
         ret = self.__after_make(ret)
-        print ret
+        self.__out(str, i_obj.name + '.cpp')
 
     def __pre_make(self, i_obj):
         '''
@@ -114,6 +114,12 @@ class CppMaker(object):
         file.close()
         return ret
         
+    def __out(self, str, name):
+        str_path = os.path.join(self.out_dir, name)
+        file = open(str_path, 'w')
+        file.write(str)
+        file.close()
+        
 if __name__ == '__main__':
     def inputparam(index, prompt, default='', options=None, nullable=True):
         if len(sys.argv) > index:
@@ -135,16 +141,18 @@ if __name__ == '__main__':
         return ret
     
     f_option = ('EMRFactory', 'HISFactory')
-    idlfile = inputparam(1, 'input the idle file path: ', 'D:\GitHub\idlparser\zhis.idl', None, False)
-    factory = inputparam(1, 'input the factory(EMRFactory/HISFactory): ', 'EMRFactory', f_option, False)
+    idlfile = inputparam(1, 'input the idle file path: ', 'D:\GitHub\idlparser\zserver.idl', None, False)
+    factory = inputparam(2, 'input the factory(EMRFactory/HISFactory): ', 'EMRFactory', f_option, False)
+    out_dir = inputparam(3, 'input the out directory(default: out): ', 'out', f_option, False)
+    
     parser = IdlParser()
     idl_obj = parser.parse(idlfile)
-    print '-----'
     
     cppmaker = CppMaker(factory = factory)
+    print len(idl_obj.interfaces)
     for i_obj in idl_obj.interfaces:
         cppmaker.make_hpp(i_obj)
-        #cppmaker.make_cpp(i_obj)
-        break
+        cppmaker.make_cpp(i_obj)
+        
 
 
