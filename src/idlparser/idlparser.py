@@ -20,7 +20,7 @@ limitations under the License.
 import os, sys
 import re
 
-p_obj_str = u'\[\w+,*\s*\w*\]\s*\w+\**\s*\w+'
+p_obj_str = u'\[\w+,*\s*\w*\(*\w*\)*\]\s*\w+\**\s*\w+'
 m_obj_str = u'\[id\(\d+\)\s*,\s*helpstring\("[a-zA-Z0-9_\u4e00-\u9fa5\s]*"\)\]\s*HRESULT\s*\w+\((?:' + p_obj_str + u'\s*\,*\s*)+\);'
 a_obj_str = u'\[\s*object,\s*uuid\([a-zA-Z0-9\-]+\),\s*dual,\s*nonextensible,\s*helpstring\("[a-zA-Z0-9_\u4e00-\u9fa5\s]*"\),\s*pointer_default\(unique\)\s*\]'
 i_obj_str = a_obj_str + u'\s*interface\s*\w+\s*:\s*\w+\s*\{\s*(?:' + m_obj_str + u'\s*)*\};'
@@ -30,7 +30,7 @@ re_m_obj = re.compile(m_obj_str)
 re_a_obj = re.compile(a_obj_str)
 re_i_obj = re.compile(i_obj_str)
 
-p_obj_str_g = u'\[(?P<p_io_type>\w+,*\s*\w*)\]\s*(?P<p_type>\w+\**)\s*(?P<p_name>\w+)'
+p_obj_str_g = u'\[(?P<p_io_type>\w+,*\s*\w*\(*(?P<p_defaultval>\w*)\)*)\]\s*(?P<p_type>\w+\**)\s*(?P<p_name>\w+)'
 m_obj_str_g = u'\[id\((?P<m_id>\d+)\)\s*,\s*helpstring\("(?P<m_helpstr>[a-zA-Z0-9_\u4e00-\u9fa5\s]*)"\)\]\s*HRESULT\s*(?P<m_name>\w+)\((?P<params>' + p_obj_str + u'\s*\,*\s*)+\);'
 a_obj_str_g = u'\[object,\s?uuid\((?P<a_uuid>[a-zA-Z0-9\-]+)\),\s?dual,\s?nonextensible,\s?helpstring\("(?P<a_helpstr>[a-zA-Z0-9_\u4e00-\u9fa5\s]*)"\),\s?pointer_default\(unique\)\s*\]'
 i_obj_str_g = a_obj_str + u'\s*interface\s*(?P<i_name>\w+)\s*:\s*(?P<i_parent>\w+)\s*\{\s*(?:' + m_obj_str + u'\s*)*\};' 
@@ -105,7 +105,6 @@ class IdlParser(object):
     def parse(self, idlfile, str_code='gb2312'):
         file = open(idlfile)
         stridl = file.read().decode(str_code)
-        print type(stridl)
         file.close()
         
         i_str_arr = self.__find_obj(stridl, re_i_obj)
@@ -171,5 +170,6 @@ class IdlParser(object):
         io_type = ret['p_io_type']
         type = ret['p_type']
         name = ret['p_name']
+        defaultval = ret['p_defaultval']
         
-        return ParamObj(io_type, type, name, '') # TODO: defaultval
+        return ParamObj(io_type, type, name, defaultval)

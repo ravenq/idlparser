@@ -6,8 +6,8 @@
 class SERVER_PROXY_API C{{ object.name }}Proxy
 {
 public:
-{% for method in object.methods %}
-	static HRESULT {{ method.name }}({% for param in method.params %}{{ param.type }} {{ param.name }}, {%if forloop.last%}{{ param.type }} {{ param.name }}{%endif%}{% endfor %});
+{% for m_obj in object.methods %}
+	static HRESULT {{ m_obj.name }}({{ m_obj.params_list }});
 {% endfor %}
 protected:
 	C{{ object.name }}Proxy(void);

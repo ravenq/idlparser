@@ -26,14 +26,32 @@ from django.template import Context, Template
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings") # to make the django happy
 
 g_map_type = {
-        'BSTR':r'LPCTSTR',
-        'BSTR*':r'wstring&',
-        'VALIANT_BOOL':r'BOOL',
-        'VALIANT_BOOL*':r'BOOL&'
+    u'BSTR':u'LPCTSTR',
+    u'BSTR*':u'wstring&',
+    u'VARIANT_BOOL':u'BOOL',
+    u'VARIANT_BOOL*':u'BOOL&',
+    u'LONG':u'LONG',
+    u'LONG*':u'LONG&',
     }
+    
+g_map_type_com = {
+    u'BSTR':u'CComBSTR',
+    u'BSTR*':u'CComBSTR',
+    u'VARIANT_BOOL':u'VARIANT_BOOL',
+    u'VARIANT_BOOL*':u'VARIANT_BOOL',
+    u'LONG':u'LONG',
+    u'LONG*':u'LONG',
+}
 
-g_re_bstr = re.compile(r'\Abstr(?P<name>\w+)\Z')
-g_re_pbstr = re.compile(r'\Apbstr(?P<name>\w+)\Z')
+g_map_defaultval_bool = {
+    u'0':u'FALSE',
+    u'-1':u'TRUE',
+}
+
+g_re_bstr = re.compile(u'\Abstr(?P<name>\w+)\Z')
+g_re_pbstr = re.compile(u'\Apbstr(?P<name>\w+)\Z')
+g_re_isout = re.compile(u'\Aout\s*,\s*retval\Z')
+g_re_isaddress = re.compile(u'\A\w+\*\Z') #一般和 isout 一致
 
 g_replace_bstr = r'lpsz\g<name>'
 g_replace_pbstr = r'str\g<name>'
@@ -72,7 +90,7 @@ class CppMaker(object):
         ret = t.render(c)
         
         ret = self.__after_make(ret)
-        self.__out(str, i_obj.name + '.h',)
+        self.__out(ret, i_obj.name + '.h',)
         
     def make_cpp(self, i_obj):
         self.__pre_make(i_obj)
@@ -83,30 +101,99 @@ class CppMaker(object):
         ret = t.render(c)
         
         ret = self.__after_make(ret)
-        self.__out(str, i_obj.name + '.cpp')
+        self.__out(ret, i_obj.name + '.cpp')
 
     def __pre_make(self, i_obj):
         '''
-        在生成代理前完成类型替换
+        在生成代理前完成预生成处理
         '''
         for m_obj in i_obj.methods:
+            # 参数类型及名称处理
             for p_obj in m_obj.params:
                 self.__map_param_type(p_obj)
                 self.__map_param_name(p_obj)
+                p_obj.com_name = u'com_' + p_obj.proxy_name
+                p_obj.is_out = g_re_isout.match(p_obj.io_type) is not None
+                p_obj.is_address = g_re_isaddress.match(p_obj.type) is not None
+
+            # 参数列表
+            self.__make_params_list(m_obj)
+            
+            # 参数调用列表
+            self.__make_params_list_invoke(m_obj)
+
+            # 函数体
+            self.__make_impl(i_obj.name, m_obj)
+
+    def __make_params_list(self, m_obj):
+        def __make_params_list_impl(m_obj, format):
+            temp = []
+            for p_obj in m_obj.params:
+                defaultval = p_obj.defaultval
+                if p_obj.defaultval and p_obj.proxy_type == u'BOOL':
+                    defaultval = g_map_defaultval_bool[p_obj.defaultval]
+
+                if p_obj.defaultval:
+                    temp.append(format % (p_obj.proxy_type, p_obj.proxy_name, defaultval))
+                else:
+                    temp.append(u'%s %s' % (p_obj.proxy_type, p_obj.proxy_name))
+
+            return u', '.join(temp)
+
+        m_obj.params_list = __make_params_list_impl(m_obj, u'%s %s = %s')
+        m_obj.params_list_impl = __make_params_list_impl(m_obj, u'%s %s /* = %s */')
+
+    def __make_params_list_invoke(self, m_obj):
+        temp = []
+        for p_obj in m_obj.params:
+            if p_obj.is_address:
+                temp.append(u'&%s' % p_obj.com_name)
+            else:
+                temp.append(p_obj.com_name)
+            
+        m_obj.params_list_invoke = u', '.join(temp)
+
+    def __make_impl(self, i_name, m_obj):
+        temp = u''
+        for p_obj in m_obj.params:
+            if p_obj.is_address:
+                temp += u'%s %s;\n\t' % (p_obj.com_type, p_obj.com_name)
+            else:
+                temp += u'%s %s(%s);\n\t' % (p_obj.com_type, p_obj.com_name, p_obj.proxy_name)
+        
+        temp += u'''\n\tCComPtr<%s> sp;\n\tC%s::Instance().CreateObject(IID_%s, (void**)&sp);\n\tHRESULT rt = sp->%s(%s);\n\n''' % (i_name, self.factory, i_name, m_obj.name, m_obj.params_list_invoke)
+        for p_obj in m_obj.params:
+            if p_obj.is_out:
+                if p_obj.proxy_type == u'wstring&':
+                    temp += u'\tif(%s != NULL)%s = %s;\n' % (p_obj.com_name, p_obj.proxy_name, p_obj.com_name)
+                elif p_obj.proxy_type == u'BOOL&':
+                    temp += u'\t%s = %s ? TRUE : FALSE;\n' % (p_obj.proxy_name, p_obj.com_name)
+                else:
+                    temp += u'\t%s = %s;\n' % (p_obj.proxy_name, p_obj.com_name)
+        
+        temp += u'\n\treturn rt;'
+        m_obj.impl = temp;
 
     def __map_param_type(self, p_obj):
-        strType = p_obj.type.strip()
-        if strType in g_map_type.keys():
-            p_obj.type = g_map_type[strType]
+        p_obj.type = p_obj.type.strip()
+        p_obj.proxy_type = g_map_type[p_obj.type]
+        p_obj.com_type = g_map_type_com[p_obj.type]
 
     def __map_param_name(self, p_obj):
-        strName = p_obj.name.strip()
-        p_obj.name = g_re_bstr.sub(g_replace_bstr, strName)
-        if strName == p_obj.name:
-             p_obj.name = g_re_pbstr.sub(g_replace_pbstr, strName)
+        p_obj.name = p_obj.name.strip()
+        if g_re_bstr.match(p_obj.name):
+            p_obj.proxy_name = g_re_bstr.sub(g_replace_bstr, p_obj.name)
+        elif g_re_pbstr.match(p_obj.name):
+            p_obj.proxy_name = g_re_pbstr.sub(g_replace_pbstr, p_obj.name)
+        else:
+            p_obj.proxy_name = p_obj.name
     
     def __after_make(self, ret):
-        return ret.replace('&amp;', '&')
+        ret = ret.replace(u'&amp;', u'&')
+        ret = ret.replace(u'&lt;', u'<')
+        ret = ret.replace(u'&gt;', u'>')
+        
+        return ret
     
     def __readfile(self, strPath):
         file = open(strPath, 'r')
@@ -117,7 +204,7 @@ class CppMaker(object):
     def __out(self, str, name):
         str_path = os.path.join(self.out_dir, name)
         file = open(str_path, 'w')
-        file.write(str)
+        file.write(str.encode('gb2312'))
         file.close()
         
 if __name__ == '__main__':
@@ -143,13 +230,12 @@ if __name__ == '__main__':
     f_option = ('EMRFactory', 'HISFactory')
     idlfile = inputparam(1, 'input the idle file path: ', 'D:\GitHub\idlparser\zserver.idl', None, False)
     factory = inputparam(2, 'input the factory(EMRFactory/HISFactory): ', 'EMRFactory', f_option, False)
-    out_dir = inputparam(3, 'input the out directory(default: out): ', 'out', f_option, False)
+    out_dir = inputparam(3, 'input the out directory(default: out): ', 'out', None, False)
     
     parser = IdlParser()
     idl_obj = parser.parse(idlfile)
     
     cppmaker = CppMaker(factory = factory)
-    print len(idl_obj.interfaces)
     for i_obj in idl_obj.interfaces:
         cppmaker.make_hpp(i_obj)
         cppmaker.make_cpp(i_obj)
