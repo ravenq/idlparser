@@ -32,6 +32,7 @@ g_map_type = {
     u'VARIANT_BOOL*':u'BOOL&',
     u'LONG':u'LONG',
     u'LONG*':u'LONG&',
+    u'int':u'int',
     }
     
 g_map_type_com = {
@@ -41,6 +42,7 @@ g_map_type_com = {
     u'VARIANT_BOOL*':u'VARIANT_BOOL',
     u'LONG':u'LONG',
     u'LONG*':u'LONG',
+    u'int':u'int',
 }
 
 g_map_defaultval_bool = {
@@ -50,7 +52,7 @@ g_map_defaultval_bool = {
 
 g_re_bstr = re.compile(u'\Abstr(?P<name>\w+)\Z')
 g_re_pbstr = re.compile(u'\Apbstr(?P<name>\w+)\Z')
-g_re_isout = re.compile(u'\Aout\s*,\s*retval\Z')
+g_re_isout = re.compile(u'\Aout\s*,*\s*\w*\Z')
 g_re_isaddress = re.compile(u'\A\w+\*\Z') #一般和 isout 一致
 
 g_replace_bstr = r'lpsz\g<name>'
@@ -157,21 +159,19 @@ class CppMaker(object):
         temp = u''
         for p_obj in m_obj.params:
             if p_obj.is_address:
-                temp += u'%s %s;\n\t' % (p_obj.com_type, p_obj.com_name)
+                temp += u'%s %s;\n\t\t' % (p_obj.com_type, p_obj.com_name)
             else:
-                temp += u'%s %s(%s);\n\t' % (p_obj.com_type, p_obj.com_name, p_obj.proxy_name)
+                temp += u'%s %s(%s);\n\t\t' % (p_obj.com_type, p_obj.com_name, p_obj.proxy_name)
         
-        temp += u'''\n\tCComPtr<%s> sp;\n\tC%s::Instance().CreateObject(IID_%s, (void**)&sp);\n\tHRESULT rt = sp->%s(%s);\n\n''' % (i_name, self.factory, i_name, m_obj.name, m_obj.params_list_invoke)
+        temp += u'''\n\t\tCComPtr<%s> sp;\n\t\tC%s::Instance().CreateObject(IID_%s, (void**)&sp);\n\t\tCHECK_THROW(sp->%s(%s));\n\n''' % (i_name, self.factory, i_name, m_obj.name, m_obj.params_list_invoke)
         for p_obj in m_obj.params:
             if p_obj.is_out:
                 if p_obj.proxy_type == u'wstring&':
-                    temp += u'\tif(%s != NULL)%s = %s;\n' % (p_obj.com_name, p_obj.proxy_name, p_obj.com_name)
+                    temp += u'\t\tif(%s != NULL)%s = %s;\n' % (p_obj.com_name, p_obj.proxy_name, p_obj.com_name)
                 elif p_obj.proxy_type == u'BOOL&':
-                    temp += u'\t%s = %s ? TRUE : FALSE;\n' % (p_obj.proxy_name, p_obj.com_name)
+                    temp += u'\t\t%s = %s ? TRUE : FALSE;\n' % (p_obj.proxy_name, p_obj.com_name)
                 else:
-                    temp += u'\t%s = %s;\n' % (p_obj.proxy_name, p_obj.com_name)
-        
-        temp += u'\n\treturn rt;'
+                    temp += u'\t\t%s = %s;\n' % (p_obj.proxy_name, p_obj.com_name)
         m_obj.impl = temp;
 
     def __map_param_type(self, p_obj):
@@ -201,10 +201,10 @@ class CppMaker(object):
         file.close()
         return ret
         
-    def __out(self, str, name):
+    def __out(self, str_result, name):
         str_path = os.path.join(self.out_dir, name)
         file = open(str_path, 'w')
-        file.write(str.encode('gb2312'))
+        file.write(str_result.encode('gb2312'))
         file.close()
         
 if __name__ == '__main__':
@@ -218,18 +218,18 @@ if __name__ == '__main__':
             ret = default
         
         if ret == '' and not nullable:
-            print 'not allow null\m'
+            print 'not allow null'
             ret = inputparam(index, prompt, default, options, nullable)
             
         if options is not None and ret not in options:
-            print 'select one of the options please!\n'
+            print 'select one of the options please!'
             ret = inputparam(index, prompt, default, options, nullable)
             
         return ret
     
     f_option = ('EMRFactory', 'HISFactory')
-    idlfile = inputparam(1, 'input the idle file path: ', 'D:\GitHub\idlparser\zserver.idl', None, False)
-    factory = inputparam(2, 'input the factory(EMRFactory/HISFactory): ', 'EMRFactory', f_option, False)
+    idlfile = inputparam(1, 'input the idle file path: ', 'zserver.idl', None, False)
+    factory = inputparam(2, 'input the factory(EMRFactory/HISFactory) defualt(EMRFactory): ', 'EMRFactory', f_option, False)
     out_dir = inputparam(3, 'input the out directory(default: out): ', 'out', None, False)
     
     parser = IdlParser()

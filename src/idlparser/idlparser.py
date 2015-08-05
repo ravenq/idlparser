@@ -102,12 +102,26 @@ class IdlParser(object):
     def __find_obj(self, src_str, re_no_g):
         return re_no_g.findall(src_str)
 
+    def __pre_parser(self, str_idl):     # the regular expression can not math method which has no params.
+        return str_idl.replace(u'(void)', u'([__X__] __X__ __X__)')
+
+    def __after_parser(self, idl_obj):
+        for i_obj in idl_obj.interfaces:
+            for m_obj in i_obj.methods:
+                for p_obj in m_obj.params:
+                    if p_obj.type == u'__X__':
+                        m_obj.params.remove(p_obj)
+
     def parse(self, idlfile, str_code='gb2312'):
         file = open(idlfile)
-        stridl = file.read().decode(str_code)
+        str_idl = file.read().decode(str_code)
         file.close()
         
-        i_str_arr = self.__find_obj(stridl, re_i_obj)
+        str_idl = self.__pre_parser(str_idl)
+        f = open('test', 'w')
+        f.write(str_idl.encode(str_code))
+        
+        i_str_arr = self.__find_obj(str_idl, re_i_obj)
         if i_str_arr is None:
             raise IdlError('find the interface object fail, check format of the idl string.')
         
@@ -118,8 +132,10 @@ class IdlParser(object):
                 raise IdlError('parse interface object fail, string: ' + i_str)
             else:
                 interfaces.append(i_obj)
-                
-        return IdlObj(interfaces)
+
+        idl = IdlObj(interfaces)
+        self.__after_parser(idl)
+        return idl
 
     def __parse_interface(self, i_str):
         i_a_arr = re_a_obj.findall(i_str) #TODO: attribute
@@ -137,8 +153,8 @@ class IdlParser(object):
         ma = re_i_obj_g.match(i_str)
         ret = ma.groupdict()
         
-        iname = ret['i_name']
-        iparent = ret['i_parent']
+        iname = ret[u'i_name']
+        iparent = ret[u'i_parent']
         
         return InterfaceObj(iname, iparent, methods)
         
@@ -156,9 +172,9 @@ class IdlParser(object):
         ma = re_m_obj_g.match(m_str)
         ret = ma.groupdict()
         
-        id = ret['m_id']
-        helpstr = ret['m_helpstr']
-        name = ret['m_name']
+        id = ret[u'm_id']
+        helpstr = ret[u'm_helpstr']
+        name = ret[u'm_name']
         
         return MethodObj(id, helpstr, name, params)
         
@@ -167,9 +183,9 @@ class IdlParser(object):
         ma = re_p_obj_g.match(p_str)
         ret = ma.groupdict()
         
-        io_type = ret['p_io_type']
-        type = ret['p_type']
-        name = ret['p_name']
-        defaultval = ret['p_defaultval']
+        io_type = ret[u'p_io_type']
+        type = ret[u'p_type']
+        name = ret[u'p_name']
+        defaultval = ret[u'p_defaultval']
         
         return ParamObj(io_type, type, name, defaultval)

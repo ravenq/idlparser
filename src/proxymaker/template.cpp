@@ -1,11 +1,30 @@
-#include "stdafx.h"
+#include "../stdafx.h"
 #include "{{ object.name.lower }}.h"
 #include <{{ factory.lower }}.h>
 
 {% for m_obj in object.methods %}
-HRESULT C{{ object.name }}Proxy::{{ m_obj.name }}({{ m_obj.params_list_impl }})
+BOOL C{{ object.name }}Proxy::{{ m_obj.name }}({{ m_obj.params_list_impl }}{% if m_obj.params_list_impl %}, {% endif %}wstring* pStrMsg)
 {
-    {{ m_obj.impl }}
+    try
+    {
+        {{ m_obj.impl }}
+    }
+    catch (CEMRException& e)
+    {
+        if(pStrMsg != NULL)
+            *pStrMsg = e.wwhat();
+        
+        return FALSE;
+    }
+    catch (...)
+    {
+        if(pStrMsg != NULL) 
+            *pStrMsg = L"未知错误";
+        
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 {% endfor %}

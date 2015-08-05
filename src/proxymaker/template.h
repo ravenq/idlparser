@@ -1,13 +1,13 @@
 #ifndef __{{ object.name.upper }}_PROXY_H__
 #define __{{ object.name.upper }}_PROXY_H__
 
-#include "ZemrServerProxyGlobal.h"
+#include "../basedefine.h"
 
-class SERVER_PROXY_API C{{ object.name }}Proxy
+class ZOE_PROXY_API C{{ object.name }}Proxy
 {
 public:
 {% for m_obj in object.methods %}
-	static HRESULT {{ m_obj.name }}({{ m_obj.params_list }});
+	static BOOL {{ m_obj.name }}({{ m_obj.params_list }}{% if m_obj.params_list_impl %}, {% endif %}wstring* pStrMsg = NULL);
 {% endfor %}
 protected:
 	C{{ object.name }}Proxy(void);
