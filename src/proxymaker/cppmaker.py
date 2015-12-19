@@ -26,23 +26,50 @@ from django.template import Context, Template
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings") # to make the django happy
 
 g_map_type = {
-    u'BSTR':u'LPCTSTR',
+    u'BSTR':u'const wstring&',
     u'BSTR*':u'wstring&',
+	u'BOOL':u'BOOL',
+	u'BOOL*':u'BOOL&',
     u'VARIANT_BOOL':u'BOOL',
     u'VARIANT_BOOL*':u'BOOL&',
     u'LONG':u'LONG',
     u'LONG*':u'LONG&',
     u'int':u'int',
-    }
-    
+	u'long':u'long',
+	u'long*':u'long&',
+	u'IUnknown*':u'IUnknown&',
+}
+
 g_map_type_com = {
     u'BSTR':u'CComBSTR',
     u'BSTR*':u'CComBSTR',
+	u'BOOL':u'BOOL',
+	u'BOOL*':u'BOOL&',
     u'VARIANT_BOOL':u'VARIANT_BOOL',
     u'VARIANT_BOOL*':u'VARIANT_BOOL',
     u'LONG':u'LONG',
     u'LONG*':u'LONG',
     u'int':u'int',
+	u'int*':u'int&',
+	u'long':u'long',
+	u'long*':u'long&',
+	u'IUnknown*':u'IUnknown&',
+}
+
+g_map_com_name_prefix = {
+    u'BSTR':u'b',
+    u'BSTR*':u'b',
+	u'BOOL':u'b',
+	u'BOOL*':u'b',
+    u'VARIANT_BOOL':u'v',
+    u'VARIANT_BOOL*':u'v',
+    u'LONG':u'lng',
+    u'LONG*':u'lng',
+    u'int':u'n',
+	u'int*':u'n',
+	u'long':u'lng',
+	u'long*':u'lng',
+	u'IUnknown*':u'p',
 }
 
 g_map_defaultval_bool = {
@@ -52,11 +79,16 @@ g_map_defaultval_bool = {
 
 g_re_bstr = re.compile(u'\Abstr(?P<name>\w+)\Z')
 g_re_pbstr = re.compile(u'\Apbstr(?P<name>\w+)\Z')
+g_re_pvbool = re.compile(u'\Apvb(?P<name>\w+)\Z')
 g_re_isout = re.compile(u'\Aout\s*,*\s*\w*\Z')
 g_re_isaddress = re.compile(u'\A\w+\*\Z') #一般和 isout 一致
 
-g_replace_bstr = r'lpsz\g<name>'
+g_replace_bstr = r'str\g<name>'
 g_replace_pbstr = r'str\g<name>'
+g_replace_pvbool = r'b\g<name>'
+
+g_re_i_name = re.compile(u'\AI(?P<name>\w+)\Z')
+g_replace_i_name = r'\g<name>'
 
 class CppMaker(object):
     '''
@@ -92,7 +124,7 @@ class CppMaker(object):
         ret = t.render(c)
         
         ret = self.__after_make(ret)
-        self.__out(ret, i_obj.name + '.h',)
+        self.__out(ret, i_obj.proxy_name + 'Proxy.h',)
         
     def make_cpp(self, i_obj):
         self.__pre_make(i_obj)
@@ -103,18 +135,20 @@ class CppMaker(object):
         ret = t.render(c)
         
         ret = self.__after_make(ret)
-        self.__out(ret, i_obj.name + '.cpp')
+        self.__out(ret, i_obj.proxy_name + 'Proxy.cpp')
 
     def __pre_make(self, i_obj):
         '''
         在生成代理前完成预生成处理
         '''
+        i_obj.proxy_name = g_re_i_name.sub(g_replace_i_name, i_obj.name)
         for m_obj in i_obj.methods:
             # 参数类型及名称处理
             for p_obj in m_obj.params:
                 self.__map_param_type(p_obj)
                 self.__map_param_name(p_obj)
                 p_obj.com_name = u'com_' + p_obj.proxy_name
+                #p_obj.com_name = g_map_com_name_prefix[p_obj.type] + p_obj.proxy_name
                 p_obj.is_out = g_re_isout.match(p_obj.io_type) is not None
                 p_obj.is_address = g_re_isaddress.match(p_obj.type) is not None
 
@@ -159,19 +193,22 @@ class CppMaker(object):
         temp = u''
         for p_obj in m_obj.params:
             if p_obj.is_address:
-                temp += u'%s %s;\n\t\t' % (p_obj.com_type, p_obj.com_name)
+                temp += u'%s %s;\n\t\t\t' % (p_obj.com_type, p_obj.com_name)
             else:
-                temp += u'%s %s(%s);\n\t\t' % (p_obj.com_type, p_obj.com_name, p_obj.proxy_name)
+                if  p_obj.type == u'BSTR':
+                    temp += u'%s %s(%s);\n\t\t\t' % (p_obj.com_type, p_obj.com_name, p_obj.proxy_name + u'.c_str()')
+                else:
+                    temp += u'%s %s(%s);\n\t\t\t' % (p_obj.com_type, p_obj.com_name, p_obj.proxy_name)
         
-        temp += u'''\n\t\tCComPtr<%s> sp;\n\t\tC%s::Instance().CreateObject(IID_%s, (void**)&sp);\n\t\tCHECK_THROW(sp->%s(%s));\n\n''' % (i_name, self.factory, i_name, m_obj.name, m_obj.params_list_invoke)
+        temp += u'''\n\t\t\tCComPtr<%s> sp;\n\t\t\tC%s::Instance().CreateObject(IID_%s, (void**)&sp);\n\t\t\tCHECK_THROW(sp->%s(%s));''' % (i_name, self.factory, i_name, m_obj.name, m_obj.params_list_invoke)
         for p_obj in m_obj.params:
             if p_obj.is_out:
                 if p_obj.proxy_type == u'wstring&':
-                    temp += u'\t\tif(%s != NULL)%s = %s;\n' % (p_obj.com_name, p_obj.proxy_name, p_obj.com_name)
+                    temp += u'\n\n\t\t\tif(%s.ByteLength() != 0)\n\t\t\t{\n\t\t\t\t%s = (BSTR)%s;\n\t\t\t}' % (p_obj.com_name, p_obj.proxy_name, p_obj.com_name)
                 elif p_obj.proxy_type == u'BOOL&':
-                    temp += u'\t\t%s = %s ? TRUE : FALSE;\n' % (p_obj.proxy_name, p_obj.com_name)
+                    temp += u'\n\n\t\t\t%s = %s ? TRUE : FALSE;' % (p_obj.proxy_name, p_obj.com_name)
                 else:
-                    temp += u'\t\t%s = %s;\n' % (p_obj.proxy_name, p_obj.com_name)
+                    temp += u'\n\n\t\t\t%s = %s;' % (p_obj.proxy_name, p_obj.com_name)
         m_obj.impl = temp;
 
     def __map_param_type(self, p_obj):
@@ -185,6 +222,8 @@ class CppMaker(object):
             p_obj.proxy_name = g_re_bstr.sub(g_replace_bstr, p_obj.name)
         elif g_re_pbstr.match(p_obj.name):
             p_obj.proxy_name = g_re_pbstr.sub(g_replace_pbstr, p_obj.name)
+        elif g_re_pvbool.match(p_obj.name):
+            p_obj.proxy_name = g_re_pvbool.sub(g_replace_pvbool, p_obj.name)
         else:
             p_obj.proxy_name = p_obj.name
     

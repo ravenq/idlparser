@@ -118,8 +118,6 @@ class IdlParser(object):
         file.close()
         
         str_idl = self.__pre_parser(str_idl)
-        f = open('test', 'w')
-        f.write(str_idl.encode(str_code))
         
         i_str_arr = self.__find_obj(str_idl, re_i_obj)
         if i_str_arr is None:

@@ -1,9 +1,10 @@
+// 此代码页由脚本生成，如需手动更改请注意再次生成覆盖
 #include "../stdafx.h"
-#include "{{ object.name.lower }}.h"
+#include "{{ object.proxy_name.lower }}proxy.h"
 #include <{{ factory.lower }}.h>
 
 {% for m_obj in object.methods %}
-BOOL C{{ object.name }}Proxy::{{ m_obj.name }}({{ m_obj.params_list_impl }}{% if m_obj.params_list_impl %}, {% endif %}wstring* pStrMsg)
+BOOL C{{ object.proxy_name }}Proxy::{{ m_obj.name }}({{ m_obj.params_list_impl }}{% if m_obj.params_list_impl %}, {% endif %}wstring& strMsg)
 {
     try
     {
@@ -11,16 +12,12 @@ BOOL C{{ object.name }}Proxy::{{ m_obj.name }}({{ m_obj.params_list_impl }}{% if
     }
     catch (CEMRException& e)
     {
-        if(pStrMsg != NULL)
-            *pStrMsg = e.wwhat();
-        
+        strMsg = e.wwhat();
         return FALSE;
     }
     catch (...)
     {
-        if(pStrMsg != NULL) 
-            *pStrMsg = L"未知错误";
-        
+        strMsg = L"未知错误";
         return FALSE;
     }
 
@@ -29,11 +26,11 @@ BOOL C{{ object.name }}Proxy::{{ m_obj.name }}({{ m_obj.params_list_impl }}{% if
 
 {% endfor %}
 
-C{{ object.name }}Proxy::C{{ object.name }}Proxy(void)
+C{{ object.proxy_name }}Proxy::C{{ object.proxy_name }}Proxy(void)
 {
 }
 
 
-C{{ object.name }}Proxy::~C{{ object.name }}Proxy(void)
+C{{ object.proxy_name }}Proxy::~C{{ object.proxy_name }}Proxy(void)
 {
 }
